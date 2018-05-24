@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 
 public class ChattyServerThread implements Runnable {
@@ -11,13 +10,12 @@ public class ChattyServerThread implements Runnable {
     private Socket client;
     private BufferedReader in;
     private BufferedWriter out;
-    private HashMap<String, ChattyServerThread> users;
+    private ChattyServer server;
     private String serverHeader = "Server: ";
-    private String SEPERATOR = "/*/";
 
-    public ChattyServerThread(Socket client, HashMap<String, ChattyServerThread> users) {
+    public ChattyServerThread(Socket client, ChattyServer server) {
         this.client = client;
-        this.users = users;
+        this.server = server;
         try {
             this.in = new BufferedReader(new InputStreamReader(client.getInputStream()));
             this.out = new BufferedWriter(new OutputStreamWriter(client.getOutputStream()));
@@ -40,16 +38,19 @@ public class ChattyServerThread implements Runnable {
                         chatProtocol(clientResponse.substring(1));
                     }
                     else {
-                        for (Map.Entry<String, ChattyServerThread> user : users.entrySet()) {
-                            user.getValue().pushMessage(this.username + ": " + clientResponse, false);
+                        if (!running)
+                            break;
+                        for (Map.Entry<String, ChattyServerThread> user : server.getUsers().entrySet()) {
+                            user.getValue().pushMessage(this.username + "> " + clientResponse, false);
                         }
                     }
                 }
             }
             catch(IOException ex){
                 ex.printStackTrace();
+            }
         }
-        }
+        this.pushMessage("Disconnected", true);
     }
 
     public void pushMessage(String message, Boolean serverMessage) {
@@ -68,13 +69,13 @@ public class ChattyServerThread implements Runnable {
             if (username == null) {
                 this.pushMessage("Please enter a username", true);
                 String clientResponse = this.in.readLine();
-                if (users.containsKey(clientResponse) || clientResponse.substring(0, 1).equals("/")) {
+                if (server.getUsers().containsKey(clientResponse) || clientResponse.substring(0, 1).equals("/") || clientResponse.equals(" ")) {
                     this.pushMessage("Username already in use or is invalid", true);
                     createUser();
                 }
                 else{
                     this.username = clientResponse;
-                    users.put(this.username, this);
+                    server.getUsers().put(this.username, this);
                     this.pushMessage("Username successfully set to " + this.username, true);
                 }
             }
@@ -86,27 +87,52 @@ public class ChattyServerThread implements Runnable {
     public void chatProtocol(String clientResponse){
         String[] parsedResponse = clientResponse.split(" ");
         switch(parsedResponse[0].toLowerCase()) {
+            case ("whisper"):
             case ("w"):
-                for (Map.Entry<String, ChattyServerThread> user : users.entrySet()) {
-                    if (user.getKey().toLowerCase().equals(parsedResponse[1].toLowerCase())) {
-                        user.getValue().pushMessage(this.username + " whispers " + String.join(" ",Arrays.copyOfRange(parsedResponse, 2, parsedResponse.length)), false);
+                    if (server.getUsers().containsKey(parsedResponse[1])) {
+                        server.getUsers().get(parsedResponse[1]).pushMessage(this.username + " whispers " + String.join(" ",Arrays.copyOfRange(parsedResponse, 2, parsedResponse.length)), false);
                         break;
                     }
-                }
-                this.pushMessage("User not found!", true);
+                    else {
+                        this.pushMessage("User not found!", true);
+                    }
                 break;
             case ("changeusername"):
-                users.remove(this.username);
+                server.getUsers().remove(this.username);
                 this.username=null;
                 createUser();
                 break;
             case ("list"):
                 String usersList = " ";
-                for (Map.Entry<String, ChattyServerThread> user : users.entrySet()) {
+                for (Map.Entry<String, ChattyServerThread> user : server.getUsers().entrySet()) {
                     usersList = usersList + user.getKey();
                     this.pushMessage(usersList, true);
                 }
+                break;
+            case ("k"):
+            case ("kick"):
+                if (server.isAdmin(this.username)){
+                    if (server.getUsers().containsKey(parsedResponse[1])){
+                        server.getUsers().get(parsedResponse[1]).running=false;
+                        try {
+                            server.getUsers().get(parsedResponse[1]).client.close();
+                        }
+                        catch(IOException ex){
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+                break;
+            case ("ban"):
+                this.server.ban(parsedResponse[1], false);
+                chatProtocol("/k "+ parsedResponse[1]);
+                break;
+            case ("ipban"):
+                this.server.ban(parsedResponse[1], true);
+                chatProtocol("/k "+ parsedResponse[1]);
+                break;
         }
     }
+
 }
 
