@@ -150,8 +150,7 @@ public class ChattyServer {
 
 
     public boolean isAdmin(String username){
-        return true;
-        //return admins.contains(username);
+        return admins.contains(username);
     }
 
     public HashMap<String, ChattyServerThread> getUsers(){

@@ -41,16 +41,18 @@ public class ChattyServerThread implements Runnable {
                         if (!running)
                             break;
                         for (Map.Entry<String, ChattyServerThread> user : server.getUsers().entrySet()) {
-                            user.getValue().pushMessage(this.username + "> " + clientResponse, false);
+                            user.getValue().pushMessage(this.username + ": " + clientResponse, false);
                         }
                     }
                 }
+            }
+            catch (SocketException ex){
+                this.pushMessage("Disconnected", true);
             }
             catch(IOException ex){
                 ex.printStackTrace();
             }
         }
-        this.pushMessage("Disconnected", true);
     }
 
     public void pushMessage(String message, Boolean serverMessage) {
@@ -115,7 +117,9 @@ public class ChattyServerThread implements Runnable {
                     if (server.getUsers().containsKey(parsedResponse[1])){
                         server.getUsers().get(parsedResponse[1]).running=false;
                         try {
+                            server.getUsers().get(parsedResponse[1]).pushMessage("You have been kicked by "+this.username, true);
                             server.getUsers().get(parsedResponse[1]).client.close();
+                            server.getUsers().remove(this.username);
                         }
                         catch(IOException ex){
                             ex.printStackTrace();
@@ -125,11 +129,11 @@ public class ChattyServerThread implements Runnable {
                 break;
             case ("ban"):
                 this.server.ban(parsedResponse[1], false);
-                chatProtocol("/k "+ parsedResponse[1]);
+                chatProtocol("k "+ parsedResponse[1]);
                 break;
             case ("ipban"):
                 this.server.ban(parsedResponse[1], true);
-                chatProtocol("/k "+ parsedResponse[1]);
+                chatProtocol("k "+ parsedResponse[1]);
                 break;
         }
     }
